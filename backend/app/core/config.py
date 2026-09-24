@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # Gemini AI Model Configuration
     GEMINI_API_KEY: Union[str, None] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
     # Database Connection String override (e.g. from Render, Railway, or Supabase)
     DATABASE_URL: Union[str, None] = None

@@ -40,33 +40,41 @@ class GeminiClient:
     ) -> str:
         """
         Execute Gemini prompt and return the raw JSON string.
-        Falls back to heuristic rule-based structured extraction when no API key is provided.
+        Automatically retries alternate model names if primary model is busy (503) or deprecated.
+        Falls back to heuristic rule-based structured extraction when API fails.
         """
         if self._genai_client:
-            try:
-                from google.genai import types
+            models_to_try = [self.model_name]
+            for alt_model in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-pro-preview"]:
+                if alt_model not in models_to_try:
+                    models_to_try.append(alt_model)
 
-                contents: List[Any] = []
-                if image_path and os.path.exists(image_path):
-                    image = Image.open(image_path)
-                    contents.append(image)
-                contents.append(prompt)
+            for target_model in models_to_try:
+                try:
+                    from google.genai import types
 
-                config = types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1,
-                )
-                if schema:
-                    config.response_schema = schema
+                    contents: List[Any] = []
+                    if image_path and os.path.exists(image_path):
+                        image = Image.open(image_path)
+                        contents.append(image)
+                    contents.append(prompt)
 
-                response = self._genai_client.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                    config=config,
-                )
-                return response.text or "{}"
-            except Exception as e:
-                logger.error(f"Gemini generate_structured_json failed: {e}. Attempting fallback.")
+                    config = types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1,
+                    )
+                    if schema:
+                        config.response_schema = schema
+
+                    response = self._genai_client.models.generate_content(
+                        model=target_model,
+                        contents=contents,
+                        config=config,
+                    )
+                    if response.text and response.text.strip():
+                        return response.text
+                except Exception as e:
+                    logger.warning(f"Gemini generate_structured_json model '{target_model}' failed ({e}). Trying next fallback model...")
 
         # Heuristic / Offline fallback extraction
         return self._generate_fallback_json(prompt, image_path)
@@ -78,30 +86,37 @@ class GeminiClient:
     ) -> str:
         """
         Generate plain text/narrative prose from Gemini.
-        Falls back to narrative synthesis when no API key is provided.
+        Falls back to narrative synthesis when API is unavailable.
         """
         if self._genai_client:
-            try:
-                from google.genai import types
+            models_to_try = [self.model_name]
+            for alt_model in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-pro-preview"]:
+                if alt_model not in models_to_try:
+                    models_to_try.append(alt_model)
 
-                contents: List[Any] = []
-                if image_path and os.path.exists(image_path):
-                    image = Image.open(image_path)
-                    contents.append(image)
-                contents.append(prompt)
+            for target_model in models_to_try:
+                try:
+                    from google.genai import types
 
-                config = types.GenerateContentConfig(
-                    temperature=0.2,
-                )
+                    contents: List[Any] = []
+                    if image_path and os.path.exists(image_path):
+                        image = Image.open(image_path)
+                        contents.append(image)
+                    contents.append(prompt)
 
-                response = self._genai_client.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                    config=config,
-                )
-                return response.text or ""
-            except Exception as e:
-                logger.error(f"Gemini generate_text failed: {e}. Attempting fallback.")
+                    config = types.GenerateContentConfig(
+                        temperature=0.2,
+                    )
+
+                    response = self._genai_client.models.generate_content(
+                        model=target_model,
+                        contents=contents,
+                        config=config,
+                    )
+                    if response.text and response.text.strip():
+                        return response.text
+                except Exception as e:
+                    logger.warning(f"Gemini generate_text model '{target_model}' failed ({e}). Trying next fallback model...")
 
         return self._generate_fallback_text(prompt)
 

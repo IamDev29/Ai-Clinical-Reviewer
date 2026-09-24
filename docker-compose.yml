@@ -23,6 +23,8 @@ services:
       dockerfile: Dockerfile
     container_name: clinical_reviewer_backend
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     environment:
@@ -36,7 +38,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-clinical_reviewer}
       CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000","http://localhost"]'
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       RUN_MIGRATIONS: "true"
       SEED_SAMPLE_DATA: "true"
     volumes:
