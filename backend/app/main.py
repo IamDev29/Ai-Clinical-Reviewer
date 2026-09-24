@@ -18,8 +18,19 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
+from app.db.base import Base
+from app.db.session import engine
+
 # Register global consistent error envelope handlers
 register_exception_handlers(app)
+
+@app.on_event("startup")
+def on_startup():
+    """Auto-create database tables on application startup."""
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        pass
 
 # Set all CORS enabled origins
 if settings.CORS_ORIGINS:

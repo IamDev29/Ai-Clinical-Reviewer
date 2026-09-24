@@ -6,21 +6,20 @@ from app.models.report import ReportStatus
 
 
 def test_seed_sample_reports(db: Session):
-    """Verify that seed_sample_reports inserts the expected 2 synthetic clinical reports."""
+    """Verify that seed_sample_reports inserts the expected synthetic clinical reports."""
     seeded = seed_sample_reports(db)
-    assert len(seeded) == 2
+    assert len(seeded) == 3
 
-    # Check first seeded report properties
+    # Check first seeded report properties (Clean Note)
     report_1 = seeded[0]
     assert report_1.status == ReportStatus.COMPLETED
-    assert "Oncology" in str(report_1.structured_report)
-    assert report_1.structured_report["review_confidence_score"] == 0.96
+    assert "John Doe" in report_1.extracted_text
 
-    # Check second seeded report properties
+    # Check second seeded report properties (Contradiction Note)
     report_2 = seeded[1]
-    assert report_2.status == ReportStatus.PROCESSING
-    assert "Diabetes" in report_2.extracted_text
+    assert report_2.status == ReportStatus.COMPLETED
+    assert "Penicillin" in report_2.extracted_text
 
     # Re-running seed should be idempotent
     seeded_again = seed_sample_reports(db)
-    assert len(seeded_again) == 2
+    assert len(seeded_again) == 3

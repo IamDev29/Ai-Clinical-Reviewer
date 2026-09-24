@@ -58,10 +58,22 @@ class Settings(BaseSettings):
                 return self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
             return self.DATABASE_URL
 
-        return (
+        # Standard PostgreSQL URI for Docker / production
+        pg_uri = (
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
             f"{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+        # Check if local PostgreSQL is reachable; if not, fallback to zero-config local SQLite
+        if self.POSTGRES_SERVER == "localhost" or self.POSTGRES_SERVER == "127.0.0.1":
+            import socket
+            try:
+                with socket.create_connection((self.POSTGRES_SERVER, self.POSTGRES_PORT), timeout=0.5):
+                    return pg_uri
+            except Exception:
+                return "sqlite:///./clinical_reviewer.db"
+
+        return pg_uri
 
     model_config = SettingsConfigDict(
         env_file=".env",

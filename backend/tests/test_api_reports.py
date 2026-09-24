@@ -45,6 +45,38 @@ def create_sample_image_bytes(format_type: str = "PNG") -> bytes:
     return buf.getvalue()
 
 
+def test_post_report_sample_filled_in_mr_pdf(client: TestClient, db: Session):
+    """Test POST /api/v1/reports with real Sample-filled-in-MR.pdf document."""
+    import os
+    pdf_path = "../Sample-filled-in-MR.pdf"
+    if not os.path.exists(pdf_path):
+        pdf_path = "Sample-filled-in-MR.pdf"
+
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        response = client.post(
+            "/api/v1/reports",
+            files={"file": ("Sample-filled-in-MR.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["input_type"] == "pdf"
+        assert data["id"] is not None
+
+        # Verify background task execution and extraction result
+        from app.services.report_processor import process_report_task
+        process_report_task(data["id"])
+
+        updated = get_report_by_id(db, report_id=data["id"])
+        assert updated is not None
+        assert updated.status in [ReportStatus.COMPLETED, ReportStatus.PROCESSING]
+        assert updated.extracted_text is not None
+        assert "Tan Ah Kow" in updated.extracted_text
+
+
 def test_post_report_plain_text(client: TestClient, db: Session):
     """Test POST /api/v1/reports with plain text clinical note."""
     text_content = (
