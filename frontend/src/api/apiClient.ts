@@ -2,11 +2,14 @@
  * Base API Client configured for AI Clinical Document Reviewer backend.
  */
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8000/api/v1';
+const getApiBaseUrl = (): string => {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  return '/api/v1';
+};
 
-export const API_BASE_URL: string =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
-  DEFAULT_API_BASE_URL;
+export const API_BASE_URL: string = getApiBaseUrl();
 
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
@@ -52,7 +55,15 @@ export class ApiClient {
     params?: Record<string, string | number | boolean | undefined>
   ): string {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = new URL(`${this.baseUrl}${cleanEndpoint}`);
+    const fullPath = `${this.baseUrl}${cleanEndpoint}`;
+    const baseOrigin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'http://localhost:3000';
+    const url =
+      fullPath.startsWith('http://') || fullPath.startsWith('https://')
+        ? new URL(fullPath)
+        : new URL(fullPath, baseOrigin);
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
