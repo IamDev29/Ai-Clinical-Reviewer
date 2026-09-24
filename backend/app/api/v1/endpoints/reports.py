@@ -144,3 +144,19 @@ def get_reports(
     items = list_reports(db, skip=skip, limit=limit)
     total = count_reports(db)
     return ReportListResponse(total=total, skip=skip, limit=limit, items=items)
+
+
+@router.post(
+    "/seed",
+    response_model=ReportListResponse,
+    summary="Seed demo sample reports",
+)
+def seed_reports_endpoint(
+    db: Session = Depends(get_db),
+) -> ReportListResponse:
+    """Populates synthetic clinical sample reports into the database."""
+    from scripts.seed_reports import seed_sample_reports
+    seed_sample_reports(db)
+    items = list_reports(db, skip=0, limit=20)
+    total = count_reports(db)
+    return ReportListResponse(total=total, skip=0, limit=20, items=items)

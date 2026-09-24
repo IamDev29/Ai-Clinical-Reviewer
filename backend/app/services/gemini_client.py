@@ -138,6 +138,11 @@ INSTRUCTIONS:
             schema=schema,
         )
 
+    @property
+    def is_configured(self) -> bool:
+        """Returns True if a Gemini API key is configured and client initialized."""
+        return self._genai_client is not None
+
     def _generate_fallback_json(self, prompt: str, image_path: Optional[str] = None) -> str:
         """Heuristic rule-based JSON generation for offline or unconfigured environments."""
         from app.schemas.clinical_report import (
@@ -150,15 +155,17 @@ INSTRUCTIONS:
 
         text = prompt
 
-        # Heuristic extraction of patient name, age, gender
+        # Heuristic extraction of patient name, age, gender, MRN
         name_match = re.search(r"Patient(?:\s*Name|\s*ID|:)?\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)", text, re.IGNORECASE)
-        age_match = re.search(r"(\d{1,3})\s*(?:yo|years?\s*old|y/o)", text, re.IGNORECASE)
+        age_match = re.search(r"(\d{1,3})\s*(?:yo|years?\s*old|y/o|age)", text, re.IGNORECASE)
         gender_match = re.search(r"\b(Male|Female|Man|Woman)\b", text, re.IGNORECASE)
+        mrn_match = re.search(r"MRN\s*[:=]?\s*([A-Za-z0-9-]+)", text, re.IGNORECASE)
 
         # Heuristic extraction of vitals
         bp_match = re.search(r"BP\s*[:=]?\s*(\d{2,3}/\d{2,3})", text, re.IGNORECASE)
         hr_match = re.search(r"HR\s*[:=]?\s*(\d{2,3})", text, re.IGNORECASE)
-        temp_match = re.search(r"Temp(?:erature)?\s*[:=]?\s*([\d\.]+\s*[FC])", text, re.IGNORECASE)
+        temp_match = re.search(r"Temp(?:erature)?\s*[:=]?\s*([\d\.]+\s*[FC]?)", text, re.IGNORECASE)
+        o2_match = re.search(r"O2\s*Sat(?:uration)?\s*[:=]?\s*(\d{2,3}%?)", text, re.IGNORECASE)
 
         # Check for allergies
         allergies = []
@@ -166,24 +173,36 @@ INSTRUCTIONS:
         if allergy_match:
             raw_allergy = allergy_match.group(1).strip()
             if "nkda" not in raw_allergy.lower() and "none" not in raw_allergy.lower():
-                allergies.append(AllergyItem(substance=raw_allergy, severity="Documented"))
+                # Extract drug name and reaction if present
+                allergen_parts = raw_allergy.split("(")
+                substance = allergen_parts[0].strip()
+                reaction = allergen_parts[1].rstrip(")").strip() if len(allergen_parts) > 1 else "Documented Reaction"
+                allergies.append(AllergyItem(substance=substance, reaction=reaction, severity="High Risk" if "anaphylaxis" in raw_allergy.lower() else "Documented"))
 
         # Check for medications
         medications = []
         med_matches = re.findall(
-            r"\b(Lisinopril|Amoxicillin|Metformin|Azithromycin|Aspirin|Ibuprofen|Atorvastatin|Omeprazole|Compound-\d+)\s*(\d+\s*mg)?",
+            r"\b(Lisinopril|Amoxicillin|Metformin|Azithromycin|Aspirin|Ibuprofen|Atorvastatin|Omeprazole|Compound-\d+)\s*(\d+\s*mg)?\s*(PO|IV|oral)?\s*(once daily|TID|BID|Q3W)?",
             text,
             re.IGNORECASE,
         )
         for med_tuple in med_matches:
             med_name = med_tuple[0]
-            med_dose = med_tuple[1] if len(med_tuple) > 1 and med_tuple[1] else None
-            medications.append(MedicationItem(name=med_name, dosage=med_dose))
+            med_dose = med_tuple[1].strip() if len(med_tuple) > 1 and med_tuple[1] else None
+            med_route = med_tuple[2].strip() if len(med_tuple) > 2 and med_tuple[2] else None
+            med_freq = med_tuple[3].strip() if len(med_tuple) > 3 and med_tuple[3] else None
+            medications.append(MedicationItem(
+                name=med_name,
+                dosage=med_dose,
+                route=med_route,
+                frequency=med_freq,
+                status="prescribed" if "prescrip" in text.lower() else "active"
+            ))
 
         # Check for diagnoses / conditions
         diagnoses = []
         dx_matches = re.findall(
-            r"\b(Hypertension|Diabetes|Bronchitis|Melanoma|Abscess|Asthma|Cancer|Pneumonia|Infection)\b",
+            r"\b(Hypertension|Diabetes|Bronchitis|Melanoma|Abscess|Asthma|Cancer|Pneumonia|Infection|Periapical abscess|NSCLC)\b",
             text,
             re.IGNORECASE,
         )
@@ -194,7 +213,7 @@ INSTRUCTIONS:
         # Check for symptoms
         symptoms = []
         symptom_matches = re.findall(
-            r"\b(Cough|Fever|Pain|Tightness|Shortness of breath|Swelling|Dyspnea|Fatigue)\b",
+            r"\b(Cough|Fever|Pain|Tightness|Shortness of breath|Swelling|Dyspnea|Fatigue|Chest tightness)\b",
             text,
             re.IGNORECASE,
         )
@@ -207,6 +226,7 @@ INSTRUCTIONS:
                 name=name_match.group(1) if name_match else None,
                 age=int(age_match.group(1)) if age_match else None,
                 gender=gender_match.group(1).capitalize() if gender_match else None,
+                mrn=mrn_match.group(1) if mrn_match else None,
             ),
             symptoms=symptoms or ["Clinical encounter evaluation"],
             diagnoses=diagnoses or ["Clinical investigation under review"],
@@ -215,9 +235,10 @@ INSTRUCTIONS:
                 blood_pressure=bp_match.group(1) if bp_match else None,
                 heart_rate=int(hr_match.group(1)) if hr_match else None,
                 temperature=temp_match.group(1) if temp_match else None,
+                o2_saturation=o2_match.group(1) if o2_match else None,
             ),
             allergies=allergies,
-            clinical_observations=["Document reviewed through AI clinical analysis pipeline."],
+            clinical_observations=["Document processed via deterministic clinical extraction engine."],
             clinical_concerns=[],
             missing_information=[],
             potential_inconsistencies=[],
@@ -228,8 +249,8 @@ INSTRUCTIONS:
     def _generate_fallback_text(self, prompt: str) -> str:
         """Heuristic narrative text summary generator."""
         return (
-            "Clinical Document Review: Patient data and clinical parameters extracted and reviewed. "
-            "Encounter findings and therapeutic elements structured for clinical evaluation."
+            "Clinical Document Review: Patient clinical note and parameters extracted and analyzed via deterministic rules engine. "
+            "Encounter findings, diagnoses, and medication prescriptions structured for clinical evaluation."
         )
 
 

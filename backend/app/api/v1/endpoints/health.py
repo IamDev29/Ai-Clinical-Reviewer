@@ -20,6 +20,8 @@ class HealthCheckResponse(BaseModel):
     environment: str = Field(..., description="Deployment environment")
     version: str = Field(..., description="Application release version")
     database: str = Field(..., description="Database connectivity status: 'connected' or 'disconnected'")
+    has_api_key: bool = Field(False, description="Whether Gemini API key is configured")
+    mode: str = Field("offline_demo_fallback", description="Extraction engine mode: 'gemini_ai' or 'offline_demo_fallback'")
     details: Optional[str] = Field(None, description="Optional diagnostic status message")
 
 
@@ -42,11 +44,16 @@ def health_check(db: Session = Depends(get_db)) -> HealthCheckResponse:
         overall_status = "degraded"
         details = "Database connection unavailable"
 
+    has_key = bool(settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip())
+    mode_str = "gemini_ai" if has_key else "offline_demo_fallback"
+
     return HealthCheckResponse(
         status=overall_status,
         app=settings.PROJECT_NAME,
         environment=settings.ENVIRONMENT,
         version="0.1.0",
         database=db_status,
+        has_api_key=has_key,
+        mode=mode_str,
         details=details,
     )

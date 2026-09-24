@@ -12,8 +12,9 @@ import {
   PlusCircle,
   Eye,
 } from 'lucide-react';
-import { listReports, Report } from '../api/reports';
+import { listReports, seedReports, Report } from '../api/reports';
 import { ApiError } from '../api/apiClient';
+import { Sparkles } from 'lucide-react';
 
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export const HistoryPage: React.FC = () => {
   const [page, setPage] = useState<number>(0);
   const [limit] = useState<number>(10);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isSeeding, setIsSeeding] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchReports = async () => {
@@ -44,6 +46,25 @@ export const HistoryPage: React.FC = () => {
     }
   };
 
+  const handleSeedReports = async () => {
+    setIsSeeding(true);
+    setError(null);
+    try {
+      const response = await seedReports();
+      setReports(response.items);
+      setTotal(response.total);
+      setPage(0);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Failed to seed demo reports.');
+      }
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   useEffect(() => {
     fetchReports();
   }, [page]);
@@ -62,6 +83,16 @@ export const HistoryPage: React.FC = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleSeedReports}
+            disabled={isSeeding || loading}
+            title="Populate synthetic clinical demo sample reports"
+          >
+            <Sparkles size={14} color="#60a5fa" className={isSeeding ? 'animate-spin' : ''} />
+            <span>{isSeeding ? 'Seeding...' : 'Load Demo Reports'}</span>
+          </button>
           <button
             type="button"
             className="btn-secondary"
@@ -96,12 +127,23 @@ export const HistoryPage: React.FC = () => {
           <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
             No Reports Submitted Yet
           </h3>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem auto' }}>
-            Submit your first clinical note, protocol PDF, or medical image to generate automated structured reviews.
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '450px', margin: '0 auto 1.5rem auto' }}>
+            Submit a clinical note, protocol PDF, or medical image. Or load synthetic demo reports to explore safety flags and extraction capabilities.
           </p>
-          <Link to="/" className="btn-primary">
-            <PlusCircle size={16} /> Submit First Document
-          </Link>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleSeedReports}
+              disabled={isSeeding}
+            >
+              <Sparkles size={16} color="#60a5fa" />
+              <span>Load Demo Reports</span>
+            </button>
+            <Link to="/" className="btn-primary">
+              <PlusCircle size={16} /> Submit First Document
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="form-card" style={{ padding: 0, overflow: 'hidden' }}>

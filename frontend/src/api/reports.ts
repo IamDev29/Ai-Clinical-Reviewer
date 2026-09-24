@@ -91,3 +91,7 @@ export const listReports = async (
 ): Promise<ReportListResponse> => {
   return apiClient.get<ReportListResponse>('/reports', { skip, limit });
 };
+
+export const seedReports = async (): Promise<ReportListResponse> => {
+  return apiClient.post<ReportListResponse>('/reports/seed');
+};
